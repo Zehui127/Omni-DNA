@@ -3,10 +3,24 @@ import torch
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
 import numpy as np
-from vq_vae_best_mint_updated import VQVAE, training_data_filter, validation_data_filter
+from .vq_vae_best_mint_updated import VQVAE, training_data_filter, validation_data_filter
 from torchvision.utils import save_image
 from tqdm import tqdm
+import argparse
 
+
+config = {
+        'batch_size': 128,
+        'num_hiddens': 128,
+        'num_residual_hiddens': 32,
+        'num_residual_layers': 2,
+        'embedding_dim': 64,
+        'num_embeddings': 6,
+        'commitment_cost': 0.25,
+        'decay': 0.99,
+        'learning_rate': 5e-4,
+        'max_epochs': 100,
+    }
 
 class SaveMNISTTokens:
     def __init__(self, model, data_loader, output_dir, device, unique_tokens={0:'0',1:'1',2:'2',3:'3',4:'4',5:'5'}):
@@ -126,49 +140,45 @@ def token_to_indices(tokens, token_list):
     return one_hot_array
 
 
-if __name__ == "__main__":
-    # Configuration
-    config = {
-        'batch_size': 128,
-        'num_hiddens': 128,
-        'num_residual_hiddens': 32,
-        'num_residual_layers': 2,
-        'embedding_dim': 64,
-        'num_embeddings': 6,
-        'commitment_cost': 0.25,
-        'decay': 0.99,
-        'learning_rate': 5e-4,
-        'max_epochs': 100,
-    }
+
+def main():
+    parser = argparse.ArgumentParser(description="Run VQVAE index saving and image reconstruction.")
+    parser.add_argument("--output_indices", type=str, required=True, help="Directory to save output indices.")
+    parser.add_argument("--reconstructed_images_dir", type=str, required=True, help="Directory to save reconstructed images.")
+    args = parser.parse_args()
+
 
     # Load the checkpoint
-    checkpoint_path = "/home/v-zehuili/repositories/simulations/checkpoints/vqvae-epoch=90-val_loss=0.00.ckpt"
+    current_file_path = os.path.dirname(os.path.abspath(__file__))
+    checkpoint_path = os.path.join(current_file_path, "vqvae-epoch=90-val_loss=0.00.ckpt")
     loaded_model = VQVAE.load_from_checkpoint(checkpoint_path)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     loaded_model.eval()
     loaded_model.to(device)
-    # dataloader
-    combined_dataset = torch.utils.data.ConcatDataset([training_data_filter, validation_data_filter])
 
-    # Combined DataLoader
+    # Dataloader
+    combined_dataset = torch.utils.data.ConcatDataset([training_data_filter, validation_data_filter])
     combined_loader = DataLoader(
         combined_dataset,
-        batch_size=1,  # Keeping batch size 1 for the SaveMNISTIndices implementation
-        shuffle=True,  # Shuffle to randomize the combined data
+        batch_size=1,  # Keeping batch size 1 for SaveMNISTIndices implementation
+        shuffle=True,
         num_workers=4
     )
 
     # Output directory for indices
-    output_dir = "/home/v-zehuili/repositories/amlt/codes/SSF-GFM/root/sft_basic_task/generated_token_randomised"
+    output_dir = args.output_indices
 
     # Create and run the saver
     index_saver = SaveMNISTTokens(loaded_model, combined_loader, output_dir, device)
     # index_saver.map_images_to_tokens()
 
     # Generate images from saved indices
-    indices_dir = output_dir
-    reconstructed_images_dir = "root/olmo_random_test_reconstructed_images_linear"
-    index_saver.generate_images_from_tokens(indices_dir, reconstructed_images_dir)
+    reconstructed_images_dir = args.reconstructed_images_dir
+    index_saver.generate_images_from_tokens(output_dir, reconstructed_images_dir)
 
-    # print(f"Indices saved to '{output_dir}' folder.")
+    print(f"Indices saved to '{output_dir}' folder.")
     print(f"Reconstructed images saved to '{reconstructed_images_dir}' folder.")
+
+
+if __name__ == "__main__":
+    main()

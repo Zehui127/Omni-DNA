@@ -2,7 +2,7 @@ import pandas as pd
 import random
 import json
 from datasets import load_dataset
-
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 def get_annotation_corpus(raw_dataset):
     """
@@ -51,6 +51,6 @@ def extend_model_tokenizer(new_vocabs, output_path,ori_model="zehui127/Omni-DNA-
     old_tokenizer.add_tokens(new_vocabs)
     print(len(old_tokenizer))  # Vocabulary size after adding the new tokens
     old_tokenizer.save_pretrained(output_path)
-    model = AutoModelForCausalLM.from_pretrained(ori_model)
+    model = AutoModelForCausalLM.from_pretrained(ori_model,trust_remote_code=True)
     model.resize_token_embeddings(len(old_tokenizer))
     model.save_pretrained(output_path, safe_serialization=False)

@@ -7,6 +7,7 @@ import sys
 from transformers import AutoModelForCausalLM, TrainingArguments, AutoModelForSequenceClassification
 import transformers
 import argparse
+from ..utils import compute_added_vocabs, extend_model_tokenizer
 
 def group_by_task_type(dataset):
     # First, get unique task types
@@ -32,9 +33,13 @@ def group_by_task_type(dataset):
 
 def run_sft(output_path):
     model_tokenizer_path = "zehui127/Omni-DNA-1B"
-    tokenizer_path = "zehui127/Omni-DNA-DNA2Function"
     tasks = ['enhancers', 'H3', 'H4', 'H3K9ac', 'H3K14ac', 'H4ac',
              'H3K4me1','H3K4me2','H3K4me3','H3K36me3','H3K79me3']
+    # extend model emb matrixa and tokenizer
+    added_vocabs = tasks
+    extend_model_tokenizer(added_vocabs,output_path)
+    model_tokenizer_path = output_path
+
     raw_dataset = load_dataset("zehui127/Omni-DNA-dataset-nt-downstream-multitask")
     dataset = raw_dataset['train']
     # group by task type

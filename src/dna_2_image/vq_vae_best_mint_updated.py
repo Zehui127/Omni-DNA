@@ -49,8 +49,7 @@ validation_data = datasets.MNIST(
     download=True,
     transform=transform
 )
-print(validation_data[0][0].shape)
-exit()
+
 # Function to filter dataset
 def filter_dataset(dataset, allowed_labels):
     indices = [i for i, (img, label) in enumerate(dataset) if label in allowed_labels]
