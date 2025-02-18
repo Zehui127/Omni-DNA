@@ -1,0 +1,18 @@
+method: bayes
+metric:
+  name: eval/matthews_correlation
+  goal: maximize
+parameters:
+  learning_rate:
+    values: [0.000001,0.000003,0.000005]
+  batch_size:
+    values: [2,4,8]
+  num_of_epoch:
+    values: [20]
+  seed:
+    values: [42, 123, 2024]
+early_terminate:
+  type: hyperband
+  s: 2
+  eta: 3
+  max_iter: 20
