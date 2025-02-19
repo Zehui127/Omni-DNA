@@ -54,72 +54,181 @@ Omni-DNA is a cross-modal, multi-task genomic foundation model designed to gener
 
 Omni-DNA is trained to perform **multiple genomic tasks** including:
 
-- **Regulatory Element Classification:** Enhancer/promoter/splice site detection
-- **Histone Modification Prediction:** Acetylation and methylation state identification
-- **Genomic Function Annotation:** DNA-to-text mapping (DNA2Function)
-- **Cross-modal Learning:** DNA-to-image mapping (DNA2Image)
-- **Multi-task Learning:** A single model can solve multiple tasks simultaneously
-
+- **Finetuning Base Models with MLP attached:** This is the same as existing Genomic Foundation Models. See `src/FT_CLS_Head`, which shows classification on Genomic Benchmarks and Nucleotide Transformer Downstream tasks. 
+- **Supervised FineTuning (SFT) for Multitasking and Cross-Modality Generation:** We show Multi-tasking examples in `src/multitask_sft`, and dna2text examples in `src/dna_2_text`.
+- **SFT for Customized Generation Task**: You could follow the same code as Multitasking and Cross-Modality Generation. But you need to prepare the dataset and then use `src/utils` to extend the vocab sizes of the base model. Examples comes later. 
 ---
 
-## Usage
-
-### As a Generative AutoRegressive Model
-
+## Examples
+## Finetuning Base Models with MLP attached
+You need to define your own data loader below are examples of performing ft on gb and nt 
 ```python
-from transformers import AutoModelForCausalLM, AutoTokenizer
+import os
+import torch
+from transformers import AutoModelForCausalLM, TrainingArguments, AutoModelForSequenceClassification, set_seed, AutoTokenizer, Trainer
+from torch.utils.data import DataLoader
+from src.datasets.dataloaders import DataCollatorLastest, return_nt_dataset, return_genomic_bench_dataset
+import numpy as np
+import sklearn
+from typing import Any, Optional, Dict, Sequence, Tuple, List, Union
+import csv
+import argparse
+import shutil
 
-# Load tokenizer and model
-model_tokenizer_path = "zehui127/Omni-DNA-1B"
-tokenizer = AutoTokenizer.from_pretrained(model_tokenizer_path)
-model = AutoModelForCausalLM.from_pretrained(model_tokenizer_path).to('cuda')
+valid_omni_dna_path = {
+    "zehui127/Omni-DNA-1B",
+    "zehui127/Omni-DNA-20M",
+    "zehui127/Omni-DNA-60M",
+    "zehui127/Omni-DNA-116M",
+    "zehui127/Omni-DNA-300M",
+    "zehui127/Omni-DNA-700M",
+}
 
-def generate(message, task_type, model=model, sample_num=1):
-    tokenized_message = tokenizer(
-        [message], return_tensors='pt', return_token_type_ids=False, add_special_tokens=True
-    ).to('cuda')
-    response = model.generate(**tokenized_message, max_new_tokens=sample_num, do_sample=False)
-    reply = tokenizer.batch_decode(response, skip_special_tokens=False)[0]
-    return reply.replace(" ", "")
+dataset_loader = {
+    "gb": return_genomic_bench_dataset,
+    "nt_downstream": return_nt_dataset,
+}
 
-# Example usage:
-message = "ATGCGTACGTAGCTAGCTAGCTAGCTAGCTA"
-output = generate(message, "DNA sequence classification")
-print(f"Generated output: {output}")
+def calculate_metric_with_sklearn(predictions: np.ndarray, labels: np.ndarray):
+    valid_mask = labels != -100  # Exclude padding tokens
+    valid_predictions = predictions[valid_mask]
+    valid_labels = labels[valid_mask]
+    return {
+        "accuracy": sklearn.metrics.accuracy_score(valid_labels, valid_predictions),
+        "f1": sklearn.metrics.f1_score(valid_labels, valid_predictions, average="macro", zero_division=0),
+        "matthews_correlation": sklearn.metrics.matthews_corrcoef(valid_labels, valid_predictions),
+        "precision": sklearn.metrics.precision_score(valid_labels, valid_predictions, average="macro", zero_division=0),
+        "recall": sklearn.metrics.recall_score(valid_labels, valid_predictions, average="macro", zero_division=0),
+    }
+
+def preprocess_logits_for_metrics(logits: Union[torch.Tensor, Tuple[torch.Tensor, Any]], _):
+    if isinstance(logits, tuple):
+        logits = logits[0]
+    if logits.ndim == 3:
+        logits = logits.reshape(-1, logits.shape[-1])
+    return torch.argmax(logits, dim=-1)
+
+def compute_metrics(eval_pred):
+    predictions, labels = eval_pred
+    return calculate_metric_with_sklearn(predictions, labels)
+
+def main():
+    parser = argparse.ArgumentParser(description="Fine-tune and evaluate model.")
+    parser.add_argument("--dataset", type=str, required=True, help="Dataset name (e.g., gb, nt_downstream)")
+    parser.add_argument("--task", type=str, required=True, help="Task name (e.g., promoter_tata)")
+    parser.add_argument("--model", type=str, required=True, help="Model type (e.g., olmo, nt, dnabert2, hyenaDNA, caduceus)")
+    parser.add_argument("--seed", type=int, required=True, help="Random seed value for training")
+    parser.add_argument("--learning_rate", type=float, required=True, help="Learning rate for training")
+    parser.add_argument("--batch_size", type=int, required=True, help="Batch size per device")
+    parser.add_argument("--num_of_epoch", type=int, required=True, help="Number of training epochs")
+
+    args = parser.parse_args()
+    print(f"###### Running fine-tune model on task '{args.task}' with seed '{args.seed}' using model '{args.model}'...")
+    run_finetune(args.dataset, args.task, args.seed, args.model, args.learning_rate, args.batch_size, args.num_of_epoch)
+
+def run_finetune(dataset, task, seed, model_type, learning_rate, batch_size, num_of_epoch, MAX_LEN=1000, path_prefix="saved_models"):
+    assert model_type in valid_omni_dna_path, "Model not supported"
+    assert dataset in ["gb", "nt_downstream"], "Dataset should be one of [gb, nt_downstream]"
+    return_data_loader = dataset_loader[dataset]
+    set_seed(seed)
+
+    cache_dir = f"{path_prefix}/cache_directory"
+    results_file = f"{path_prefix}/results_{model_type}.csv"
+    # make dir for results_file if not exist
+    os.makedirs(os.path.dirname(results_file), exist_ok=True)
+    training_args = TrainingArguments(
+        output_dir=f"{path_prefix}/output_model",
+        learning_rate=learning_rate,
+        per_device_train_batch_size=batch_size,
+        per_device_eval_batch_size=batch_size * 2,
+        num_train_epochs=num_of_epoch,
+        evaluation_strategy="epoch",
+        save_strategy="epoch",
+        max_grad_norm=1.0,
+        metric_for_best_model="matthews_correlation",
+        greater_is_better=True,
+        save_total_limit=2,
+        load_best_model_at_end=True,
+        save_safetensors=False,
+    )
+
+    tokenizer = AutoTokenizer.from_pretrained(model_type, trust_remote_code=True)
+    tokenizer.model_max_length = MAX_LEN
+    train_data, val_data, test_data, class_num, max_seq_len = return_data_loader(task, tokenizer)
+    model = AutoModelForSequenceClassification.from_pretrained(model_type, num_labels=class_num,trust_remote_code=True)
+    collate_fn = DataCollatorLastest(tokenizer=tokenizer)
+    print(f"!!!!!!MAX LEN IS {max_seq_len}")
+
+    trainer = Trainer(
+        model=model,
+        tokenizer=None,
+        args=training_args,
+        preprocess_logits_for_metrics=preprocess_logits_for_metrics,
+        compute_metrics=compute_metrics,
+        train_dataset=train_data,
+        eval_dataset=val_data,
+        data_collator=collate_fn
+    )
+    trainer.train(resume_from_checkpoint=False)
+
+    print("\nTesting the model on the test dataset...\n")
+    test_metrics = trainer.evaluate(eval_dataset=test_data)
+    print(f"Test Metrics: {test_metrics}")
+    write_header = not os.path.exists(results_file)
+
+    with open(results_file, mode="a", newline="") as f:
+        writer = csv.writer(f)
+        if write_header:
+            writer.writerow(["Task", "Seed", "Model Type", "Learning Rate", "Batch Size", "Epochs"] + list(test_metrics.keys()))
+        writer.writerow([task, seed, model_type, learning_rate, batch_size, num_of_epoch] + list(test_metrics.values()))
+
+    print(f"Test metrics appended to {results_file}")
+
+if __name__ == "__main__":
+    main()
+
 ```
-
-### Attaching Classification Head
-
-```python
-from transformers import AutoModelForSequenceClassification, AutoTokenizer
-
-model = AutoModelForSequenceClassification.from_pretrained("zehui127/Omni-DNA-1B", num_labels=2, trust_remote_code=True)
-tokenizer = AutoTokenizer.from_pretrained("zehui127/Omni-DNA-1B", trust_remote_code=True)
-
-sequence = "ATGCGTACGTAGCTAGCTAGCTAGCTAGCTA"
-inputs = tokenizer(sequence, return_tensors="pt")
-outputs = model(**inputs)
-logits = outputs.logits
-predicted_class = logits.argmax(dim=-1).item()
-print(f"Predicted class: {predicted_class}")
-```
-
----
-
 ## Supervised Finetuning (SFT) Example
+
+Given an example Json File
+
+```Json
+[
+  {
+    "instruction": "ATGCGTAC",
+    "task": "TASK1:complementary DNA strand",
+    "output": "TACGCATG"
+  },
+  {
+    "instruction": "CGCATAT",
+    "task": "TASK1:complementary DNA strand",
+    "output": "GCGTATA"
+  },
+  {
+    "instruction": "GCGAGATATAAAAA",
+    "task": "TASK2:Classify the given DNA sequence based on its function.",
+    "output": "Class: Promoter region"
+  }
+]
+```
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from trl import SFTTrainer, SFTConfig, DataCollatorForCompletionOnlyLM
 from datasets import load_dataset
+from src.utils import compute_added_vocabs, extend_model_tokenizer
 
-model_name = "zehui127/Omni-DNA-1B"
-model = AutoModelForCausalLM.from_pretrained(model_name, trust_remote_code=True)
-tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+# define newly added vocabs and a local path to save extended model
+# see src/utils.py/compute_added_vocabs for how to compute the added vocabs
+added_vocabs = ...
+path_for_extended_model = ...
+extend_model_tokenizer(added_vocabs,path_for_extended_model)
+# load extended model
+model = AutoModelForCausalLM.from_pretrained(path_for_extended_model)
+tokenizer = AutoTokenizer.from_pretrained(path_for_extended_model)
 
 dataset = load_dataset("json", data_files={"train": "path/to/train.json"})
 dataset = dataset["train"]
-
 def formatting_prompts_func(example):
     return [f"{example['instruction']} {example['task']} [SEP] {example['output']}"]
 
@@ -145,6 +254,26 @@ trainer = SFTTrainer(
 trainer.train()
 ```
 
+## Replicating Experiments in the Paper
+```python
+# finetuning with MLP on Genomic Benchmark and Nucleotide Transformer Downstream tasks. 
+python cls_head_ft.py --dataset nt_downstream --task promoter_tata --model zehui127/Omni-DNA-116M --seed 123 --learning_rate 0.000005 --batch_size 8 --num_of_epoch 10
+
+#  finetuning with MLP with hyperparamter sweeping
+python cls_head_ft_sweep.py
+
+# inference with multi-tasking model
+python sft_multitask.py --model_tokenizer_path zehui127/Omni-DNA-Multitask
+
+# inference with dna 2 text model, target_dir to save output results
+python dna_2_text.py --target_dir current_working_dir
+
+
+# inference with dna 2 image model, target_dir to save output results
+python dna_2_image.py --target_dir current_working_dir
+## then generate the images from generated discrete tokens
+python dna_2_image.py --output_indices current_working_dir --reconstructed_images_dir current_working_dir
+```
 ---
 
 ## Citation
