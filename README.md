@@ -255,6 +255,7 @@ trainer.train()
 ```
 
 ## Replicating Experiments in the Paper
+Run the bash scirpt `run.sh`
 ```bash
 export PYTHONPATH=$(pwd)
 
