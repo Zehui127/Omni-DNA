@@ -152,10 +152,10 @@ trainer.train()
 If you use Omni-DNA in your research, please cite:
 
 ```bibtex
-@article{OmniDNA,
-  title={Scaling Auto-Regressive Transformer to Multi-Tasking Genomic Foundation Model},
-  author={Zehui Li et al.},
-  journal={ArXiv},
+@article{li2025omni,
+  title={Omni-DNA: A Unified Genomic Foundation Model for Cross-Modal and Multi-Task Learning},
+  author={Li, Zehui and Subasri, Vallijah and Shen, Yifei and Li, Dongsheng and Zhao, Yiren and Stan, Guy-Bart and Shan, Caihua},
+  journal={arXiv preprint arXiv:2502.03499},
   year={2025}
 }
 ```
@@ -178,8 +178,6 @@ Omni-DNA is released under the **MIT License**.
 
 ## Contact
 
-For research inquiries, contact **Zehui Li** at `zl6222@ic.ac.uk`. 
-
-For model deployment or collaboration, please reach out via Hugging Face discussions.
+For research inquiries, contact **Zehui Li** at `zl6222@ic.ac.uk` or raise Issues through github.
 
 ---
