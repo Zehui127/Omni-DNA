@@ -37,6 +37,10 @@ def main():
     parser.add_argument("--output_path", type=str, required=True, help="Path to save the generated outputs.")
     args = parser.parse_args()
 
+    # Ensure the directory exists
+    output_dir = os.path.dirname(args.output_path)
+    if output_dir and not os.path.exists(output_dir):
+        os.makedirs(output_dir, exist_ok=True)
     model_tokenizer_path = "zehui127/Omni-DNA-DNA2Function"
     tokenizer = AutoTokenizer.from_pretrained(model_tokenizer_path)
     model = AutoModelForCausalLM.from_pretrained(model_tokenizer_path).to('cuda')

@@ -16,7 +16,7 @@ Omni-DNA is a cross-modal, multi-task genomic foundation model designed to gener
    ```
 2. Install dependencies:
    ```bash
-   pip install trl==0.13 transformers datasets datasets ai2-olmo 
+   pip install trl==0.13 transformers datasets datasets ai2-olmo
    # for replicating the dna2image, the following package are also needed
    # pip install torchvision matplotlib pytorch_lightning
    ```
@@ -54,14 +54,14 @@ Omni-DNA is a cross-modal, multi-task genomic foundation model designed to gener
 
 Omni-DNA is trained to perform **multiple genomic tasks** including:
 
-- **Finetuning Base Models with MLP attached:** This is the same as existing Genomic Foundation Models. See `src/FT_CLS_Head`, which shows classification on Genomic Benchmarks and Nucleotide Transformer Downstream tasks. 
+- **Finetuning Base Models with MLP attached:** This is the same as existing Genomic Foundation Models. See `src/FT_CLS_Head`, which shows classification on Genomic Benchmarks and Nucleotide Transformer Downstream tasks.
 - **Supervised FineTuning (SFT) for Multitasking and Cross-Modality Generation:** We show Multi-tasking examples in `src/multitask_sft`, and dna2text examples in `src/dna_2_text`.
-- **SFT for Customized Generation Task**: You could follow the same code as Multitasking and Cross-Modality Generation. But you need to prepare the dataset and then use `src/utils` to extend the vocab sizes of the base model. Examples comes later. 
+- **SFT for Customized Generation Task**: You could follow the same code as Multitasking and Cross-Modality Generation. But you need to prepare the dataset and then use `src/utils` to extend the vocab sizes of the base model. Examples comes later.
 ---
 
 ## Examples
 ## Finetuning Base Models with MLP attached
-You need to define your own data loader below are examples of performing ft on gb and nt 
+You need to define your own data loader below are examples of performing ft on gb and nt
 ```python
 import os
 import torch
@@ -255,24 +255,25 @@ trainer.train()
 ```
 
 ## Replicating Experiments in the Paper
-```python
-# finetuning with MLP on Genomic Benchmark and Nucleotide Transformer Downstream tasks. 
-python cls_head_ft.py --dataset nt_downstream --task promoter_tata --model zehui127/Omni-DNA-116M --seed 123 --learning_rate 0.000005 --batch_size 8 --num_of_epoch 10
+```bash
+export PYTHONPATH=$(pwd)
 
-#  finetuning with MLP with hyperparamter sweeping
-python cls_head_ft_sweep.py
+# finetuning with MLP on Genomic Benchmark and Nucleotide Transformer Downstream tasks.
+python scripts/cls_head_ft.py --dataset nt_downstream --task promoter_tata --model zehui127/Omni-DNA-116M --seed 123 --learning_rate 0.000005 --batch_size 8 --num_of_epoch 10
+# or finetuning with MLP with hyperparamter sweeping
+python scripts/cls_head_ft_sweep.py
 
 # inference with multi-tasking model
-python sft_multitask.py --model_tokenizer_path zehui127/Omni-DNA-Multitask
+python scripts/sft_multitask.py --model_tokenizer_path zehui127/Omni-DNA-Multitask
 
-# inference with dna 2 text model, target_dir to save output results
-python dna_2_text.py --target_dir current_working_dir
-
+# inference with dna 2 text model, output_path to save output results
+python scripts/dna_2_text.py --output_path current_working_dir
 
 # inference with dna 2 image model, target_dir to save output results
-python dna_2_image.py --target_dir current_working_dir
+python scripts/dna_2_image_indices.py --target_dir current_working_dir
 ## then generate the images from generated discrete tokens
-python dna_2_image.py --output_indices current_working_dir --reconstructed_images_dir current_working_dir
+python scripts/dna_2_image_images.py --output_indices current_working_dir --reconstructed_images_dir current_working_dir
+
 ```
 ---
 
