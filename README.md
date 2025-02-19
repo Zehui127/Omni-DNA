@@ -16,7 +16,7 @@ Omni-DNA is a cross-modal, multi-task genomic foundation model designed to gener
    ```
 2. Install dependencies:
    ```bash
-   pip install datasets ai2-olmo trl==0.13 transformers datasets
+   pip install trl==0.13 transformers datasets datasets ai2-olmo 
    # for replicating the dna2image, the following package are also needed
    # pip install torchvision matplotlib pytorch_lightning
    ```
