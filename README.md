@@ -56,7 +56,7 @@ Omni-DNA is trained to perform **multiple genomic tasks** including:
 
 - **Finetuning Base Models with MLP attached:** This is the same as existing Genomic Foundation Models. See `src/FT_CLS_Head`, which shows classification on Genomic Benchmarks and Nucleotide Transformer Downstream tasks.
 - **Supervised FineTuning (SFT) for Multitasking and Cross-Modality Generation:** We show Multi-tasking examples in `src/multitask_sft`, and dna2text examples in `src/dna_2_text`.
-- **SFT for Customized Generation Task**: You could follow the same code as Multitasking and Cross-Modality Generation. But you need to prepare the dataset and then use `src/utils` to extend the vocab sizes of the base model. Examples comes later.
+- **SFT for Customized Generation Task**: You could follow the same code as Multitasking and Cross-Modality Generation. But you need to prepare the dataset and then use `src/utils` to extend the vocab sizes of the base model. Examples will come soon.
 ---
 
 ## Examples
